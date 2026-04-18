@@ -12,6 +12,7 @@ import copy
 # ---------------------------------------------------------------------------
 ORIGINAL_FEAT_DIM = 8   # original DeepTrace features
 ENRICHED_FEAT_DIM = 10  # +2: closeness_centrality, norm_distance_to_index
+TEMPORAL_FEAT_DIM = 11  # +3: discovery_order, time_step, growth_stage
 
 class NFeatureDict(dict):
     def __missing__(self, key):

@@ -3,7 +3,7 @@ import dgl.nn as dglnn
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
-from graph_data_process import TreeDataProcess, ORIGINAL_FEAT_DIM, ENRICHED_FEAT_DIM
+from graph_data_process import TreeDataProcess, ORIGINAL_FEAT_DIM, ENRICHED_FEAT_DIM, TEMPORAL_FEAT_DIM
 import networkx as nx
 import numpy as np
 from dgl.convert import from_networkx
@@ -179,6 +179,101 @@ class WeightedSAGE(nn.Module):
         h = F.relu(self.wmp3(graph, h))
         h = self.wmp4(graph, h)
         return h
+
+
+# ---------------------------------------------------------------------------
+# TemporalSAGE  —  DeepTrace++ temporal awareness
+# ---------------------------------------------------------------------------
+
+class TemporalSAGE(nn.Module):
+    """
+    GraphSAGE variant that accepts temporal-augmented features and
+    optionally applies a GRU recurrent update on hidden embeddings.
+
+    Drop-in compatible with SAGE: same forward(graph, inputs) signature.
+    The only difference is that `in_feats` should be TEMPORAL_FEAT_DIM (11)
+    instead of ORIGINAL_FEAT_DIM (8), and the model exposes a `get_embeddings`
+    method that returns the intermediate hidden representations (before the
+    output layer) for use with the embedding memory / smoothing system.
+
+    Parameters
+    ----------
+    in_feats  : input feature dimension (11 for temporal, 8 for original)
+    hid_feats : hidden layer dimension
+    out_feats : output dimension (1 for superspreader scoring)
+    use_gru   : if True, insert a GRU cell between conv3 and conv4
+                that merges current embeddings with previous-step embeddings.
+                The caller must provide `prev_hidden` to forward().
+    """
+
+    def __init__(self, in_feats: int, hid_feats: int, out_feats: int,
+                 use_gru: bool = False):
+        super().__init__()
+        self.conv1 = dglnn.SAGEConv(
+            in_feats=in_feats, out_feats=hid_feats, aggregator_type='lstm')
+        self.conv2 = dglnn.SAGEConv(
+            in_feats=hid_feats, out_feats=hid_feats, aggregator_type='lstm')
+        self.conv3 = dglnn.SAGEConv(
+            in_feats=hid_feats, out_feats=hid_feats, aggregator_type='lstm')
+        self.conv4 = dglnn.SAGEConv(
+            in_feats=hid_feats, out_feats=out_feats, aggregator_type='lstm')
+
+        self.use_gru = use_gru
+        if use_gru:
+            self.gru_cell = nn.GRUCell(
+                input_size=hid_feats, hidden_size=hid_feats)
+
+    def forward(self, graph, inputs, prev_hidden=None):
+        """
+        Parameters
+        ----------
+        graph       : DGL graph
+        inputs      : (N, in_feats) node features
+        prev_hidden : (N, hid_feats) optional previous hidden state
+                      for GRU update.  Ignored if use_gru=False.
+
+        Returns
+        -------
+        logits : (N, out_feats) — predictions
+        """
+        h = self.conv1(graph, inputs)
+        h = F.relu(h)
+        h = self.conv2(graph, h)
+        h = F.relu(h)
+        h = self.conv3(graph, h)
+        h = F.relu(h)
+
+        # Optional GRU recurrent update before the output layer
+        if self.use_gru and prev_hidden is not None:
+            h = self.gru_cell(h, prev_hidden)
+
+        h = self.conv4(graph, h)
+        return h
+
+    def get_embeddings(self, graph, inputs, prev_hidden=None):
+        """
+        Run the forward pass but return the *hidden embeddings* (before
+        the final output layer) instead of the logits.  Used by the
+        embedding memory / smoothing system.
+
+        Returns
+        -------
+        embeddings : (N, hid_feats)
+        logits     : (N, out_feats)
+        """
+        h = self.conv1(graph, inputs)
+        h = F.relu(h)
+        h = self.conv2(graph, h)
+        h = F.relu(h)
+        h = self.conv3(graph, h)
+        h = F.relu(h)
+
+        if self.use_gru and prev_hidden is not None:
+            h = self.gru_cell(h, prev_hidden)
+
+        embeddings = h.clone()           # save pre-output embeddings
+        logits     = self.conv4(graph, h)
+        return embeddings, logits
 
 
 def evaluate(model, graph, features, labels):
