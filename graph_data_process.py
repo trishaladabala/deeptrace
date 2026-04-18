@@ -7,6 +7,12 @@ from networkx.algorithms.approximation.steinertree import metric_closure
 from math import log
 import copy
 
+# ---------------------------------------------------------------------------
+# Feature dimension constants — update these if you change feature sets
+# ---------------------------------------------------------------------------
+ORIGINAL_FEAT_DIM = 8   # original DeepTrace features
+ENRICHED_FEAT_DIM = 10  # +2: closeness_centrality, norm_distance_to_index
+
 class NFeatureDict(dict):
     def __missing__(self, key):
         value = self[key] = type(self)()
@@ -58,17 +64,25 @@ class TreeDataProcess(object):
         uninft_node_list = random.sample(leafed_index_list, floor(0.6 * uninft_size))
         return uninft_node_list
 
-    def nfeature_process(self):
+    def nfeature_process(self, enriched: bool = False):
         """
-        node_num
-        degree/all degree;
-        degree/avg degree;
-        inft degree/node degree;
-        inft degree/all uninft degree;
-        distance/all distance
-        layer_rate
-        :param tree:
-        :return:
+        Compute per-node features for the GNN.
+
+        Original 8 features (enriched=False):
+            node_num, degree_per, degree_per_aver,
+            inft_ndegree_per, inft_alldegree_per,
+            distance_per, layer_rate, layer_num
+
+        Enriched 10 features (enriched=True)  — DeepTrace++:
+            above 8  +  closeness_centrality  +  norm_dist_to_index
+
+        Parameters
+        ----------
+        enriched : bool
+            If True, append closeness centrality and normalised
+            shortest-path distance from the highest-degree node
+            (used as a proxy for the index case when the true
+            source is unknown).
         """
         avg_degree = self.all_degree_num / self.all_node_num
         nfeature_dict = NFeatureDict()
@@ -97,6 +111,57 @@ class TreeDataProcess(object):
         for k, v in layer_dict_temp.items():
             nfeature_dict[k]["layer_rate"] = float(v)
             nfeature_dict[k]["layer_num"] = log(self.layer_num)
+
+        # ── DeepTrace++ enrichment ────────────────────────────────────────
+        if enriched:
+            nfeature_dict = self._enrich_features(nfeature_dict)
+
+        return nfeature_dict
+
+    # ------------------------------------------------------------------
+    def _enrich_features(self, nfeature_dict: 'NFeatureDict') -> 'NFeatureDict':
+        """
+        Append two centrality-aware features to every node entry.
+
+        Feature 9  — closeness_centrality
+            C(v) = (n-1) / sum_u d(v,u)
+            Measures how close a node is to all others.  A true epidemic
+            source tends to sit near the centroid of the infection tree,
+            giving it a high closeness score.
+            Normalised by max centrality in the graph so values ∈ [0, 1].
+
+        Feature 10 — norm_dist_to_index
+            d(v, v_index) / diameter(G)
+            Shortest-path hop distance from each node to the *index node*
+            (highest-degree node, our proxy for the first known case).
+            Normalised by graph diameter so values ∈ [0, 1].
+            Nodes close to the index case receive low scores, which
+            distinguishes peripheral spreaders from the core cluster.
+        """
+        # ── Closeness centrality ──────────────────────────────────────
+        closeness = nx.closeness_centrality(self.tree)
+        max_closeness = max(closeness.values()) if closeness else 1.0
+        if max_closeness == 0:
+            max_closeness = 1.0
+
+        # ── Index node: highest-degree node as proxy for first case ──
+        index_node   = max(self.degree_dict, key=lambda n: self.degree_dict[n])
+        path_lengths = nx.single_source_shortest_path_length(self.tree, index_node)
+
+        # Diameter — use eccentricity for speed; fallback to max path len
+        try:
+            diam = nx.diameter(self.tree)
+        except nx.NetworkXError:
+            diam = max(path_lengths.values()) if path_lengths else 1
+        diam = diam if diam > 0 else 1
+
+        for node in self.degree_dict:
+            nfeature_dict[node]["closeness_centrality"] = (
+                closeness.get(node, 0.0) / max_closeness
+            )
+            nfeature_dict[node]["norm_dist_to_index"] = (
+                path_lengths.get(node, diam) / diam
+            )
 
         return nfeature_dict
 

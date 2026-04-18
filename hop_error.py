@@ -4,7 +4,7 @@ import graph_data_process
 import copy
 import math
 import numpy as np
-from cal_max_min_ds_origin import CalMaxMinDS
+from cal_max_min_ds import CalMaxMinDS
 from BFS_ds import CalBFSMaxMinDS
 import ast
 from numpy import mean
@@ -257,7 +257,7 @@ def run1():
     hop_err_list = top1_geo_BFS_per_list + top1_aver_BFS_per_list + top1_BFS_max_per_list + top1_geo_max_min_per_list + top1_aver_max_min_per_list + top1_max_per_list + top1_min_per_list + top1_min_per_list
     print("hop_err_list:", hop_err_list)
     dataframe = pd.DataFrame({"mds": md_list, "hop err": hop_err_list})
-    dataframe.to_csv("hop_error\\er1.csv", index=False, sep=',')
+    dataframe.to_csv("hop_error/er1.csv", index=False, sep=',')
     return dataframe
 
 
@@ -397,7 +397,7 @@ def run2():
     hop_err_list = top1_geo_BFS_per_list + top1_aver_BFS_per_list + top1_BFS_max_per_list + top1_geo_max_min_per_list + top1_aver_max_min_per_list + top1_max_per_list + top1_min_per_list + top1_min_per_list
     print("hop_err_list:", hop_err_list)
     dataframe = pd.DataFrame({"mds": md_list, "hop err": hop_err_list})
-    dataframe.to_csv("hop_error\\ba.csv", index=False, sep=',')
+    dataframe.to_csv("hop_error/ba.csv", index=False, sep=',')
     return dataframe
 
 
@@ -540,7 +540,7 @@ def run3():
 
     print("hop_err_list:", hop_err_list)
     dataframe = pd.DataFrame({"mds": md_list, "hop err": hop_err_list})
-    dataframe.to_csv("hop_error\\ws.csv", index=False, sep=',')
+    dataframe.to_csv("hop_error/ws.csv", index=False, sep=',')
     return dataframe
 
 
@@ -682,7 +682,7 @@ def run4():
     hop_err_list = top1_geo_BFS_per_list + top1_aver_BFS_per_list + top1_BFS_max_per_list + top1_geo_max_min_per_list + top1_aver_max_min_per_list + top1_max_per_list + top1_min_per_list + top1_min_per_list
     print("hop_err_list:", hop_err_list)
     dataframe = pd.DataFrame({"mds": md_list, "hop err": hop_err_list})
-    dataframe.to_csv("hop_error\\ran.csv", index=False, sep=',')
+    dataframe.to_csv("hop_error/ran.csv", index=False, sep=',')
     return dataframe
 
 
@@ -766,12 +766,12 @@ def histogram_plot(er_list, ba_list, ws_list, rn_olist):
 
 
 def excel_to_df():
-    er_df = pd.read_csv("hop_error\\er.csv", sep=",")
+    er_df = pd.read_csv("hop_error/er.csv", sep=",")
     er_df.head()
     print("df:", er_df)
-    ba_df = pd.read_csv("hop_error\\ba.csv", sep=",")
-    ws_df = pd.read_csv("hop_error\\ws.csv", sep=",")
-    ran_df = pd.read_csv("hop_error\\ran.csv", sep=",")
+    ba_df = pd.read_csv("hop_error/ba.csv", sep=",")
+    ws_df = pd.read_csv("hop_error/ws.csv", sep=",")
+    ran_df = pd.read_csv("hop_error/ran.csv", sep=",")
     # fig, axes = plt.subplots(1, 1)
     # sns.boxplot(x="mds", y="hop err", data=df, palette="Set3")
     # plt.show()
@@ -779,11 +779,11 @@ def excel_to_df():
 
 
 def excel_to_df2():
-    er_df = pd.read_csv("source_err\\er.csv", sep=",")
+    er_df = pd.read_csv("source_err/er.csv", sep=",")
     print("df:", er_df)
-    ba_df = pd.read_csv("source_err\\ba.csv", sep=",")
-    ws_df = pd.read_csv("source_err\\ws.csv", sep=",")
-    ran_df = pd.read_csv("source_err\\ran.csv", sep=",")
+    ba_df = pd.read_csv("source_err/ba.csv", sep=",")
+    ws_df = pd.read_csv("source_err/ws.csv", sep=",")
+    ran_df = pd.read_csv("source_err/ran.csv", sep=",")
     # fig, axes = plt.subplots(1, 1)
     # sns.boxplot(x="mds", y="hop err", data=df, palette="Set3")
     # plt.show()
@@ -838,7 +838,7 @@ def compare():
             # print("ds_dict:", ds_dict)
 
             cal_max_min_ds = CalMaxMinDS(tree_ka, unift_list, i)
-            max_permutation, max_permute_prob = cal_max_min_ds.cal_max_ds()
+            max_permute_prob = cal_max_min_ds.cal_max_ds()
             min_permute_prob = cal_max_min_ds.cal_min_ds()
             max_prob_dict[i] = rc_num * max_permute_prob
             min_prob_dict[i] = rc_num * min_permute_prob
@@ -848,7 +848,7 @@ def compare():
             # print("min_dict:", min(list(ds_dict.values())))
             # print("min:", min(ds_dict, key=ds_dict.get))
             print("max_appr:", max_permute_prob)
-            print("max_permutation:", max_permutation)
+            # print("max_permutation:", max_permutation)
             # print("min_appr:", min_permute_prob)
             if true_max == max_permute_prob:
                 num = num + 1
