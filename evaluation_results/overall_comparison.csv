@@ -1,0 +1,6 @@
+model,top1_acc,top5_acc,top10_acc,mean_hop_err,mean_first_detect,mean_time_s
+Rumor Center,0.8,1.0,1.0,0.23,200.0,0.006967999999999999
+DT++ enriched,0.28,0.38,0.39,2.27,200.0,0.556088
+DT++ weighted,0.28,0.38,0.39,2.19,200.0,0.525532
+DeepTrace,0.28,0.4,0.43,2.35,200.0,0.534527
+DeepTrace++,0.28,0.39,0.42,2.11,200.0,0.563322

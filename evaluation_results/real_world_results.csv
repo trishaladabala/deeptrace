@@ -1,0 +1,17 @@
+dataset,model,top1_acc,top5_acc,top10_acc,hop_error,first_detect,time_s
+bfs_part_tree_10.csv,DeepTrace,0,0,0,3,43,0.006009101867675781
+bfs_part_tree_10.csv,DT++ enriched,0,0,0,3,43,0.006417989730834961
+bfs_part_tree_10.csv,DT++ weighted,0,0,0,3,43,0.005795955657958984
+bfs_part_tree_10.csv,DeepTrace++,0,0,0,3,43,0.005991935729980469
+dfs_part_tree_10.csv,DeepTrace,0,0,0,3,43,0.006002187728881836
+dfs_part_tree_10.csv,DT++ enriched,0,0,0,3,43,0.00590205192565918
+dfs_part_tree_10.csv,DT++ weighted,0,0,0,3,43,0.006266117095947266
+dfs_part_tree_10.csv,DeepTrace++,0,0,0,3,43,0.00574803352355957
+tw_data_43_tree.csv,DeepTrace,1,1,1,0,20,0.0031998157501220703
+tw_data_43_tree.csv,DT++ enriched,1,1,1,0,20,0.0031299591064453125
+tw_data_43_tree.csv,DT++ weighted,1,1,1,0,20,0.003251791000366211
+tw_data_43_tree.csv,DeepTrace++,1,1,1,0,20,0.0031130313873291016
+tw_data_76_tree.csv,DeepTrace,1,1,1,0,38,0.0043239593505859375
+tw_data_76_tree.csv,DT++ enriched,1,1,1,0,38,0.0050733089447021484
+tw_data_76_tree.csv,DT++ weighted,1,1,1,0,38,0.004441022872924805
+tw_data_76_tree.csv,DeepTrace++,1,1,1,0,38,0.004338264465332031

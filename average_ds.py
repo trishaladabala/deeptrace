@@ -4,7 +4,7 @@ import graph_data_process
 import copy
 from math import *
 import numpy as np
-from cal_max_min_ds_origin import CalMaxMinDS
+from cal_max_min_ds import CalMaxMinDS
 from BFS_ds import CalBFSMaxMinDS
 import ast
 from numpy import mean
@@ -44,29 +44,26 @@ class CalDS(object):
         no_add_select_pool.append(self.source)
         edge_prob_num = 1
         permutation_dict = NFeatureDict()
-        permutation_dict[str([self.source])]['permutation_prob'] = 1/edge_prob_num
-        permutation_dict[str([self.source])]['edge_prob_num'] = edge_prob_num
+        permutation_dict[(self.source,)]['permutation_prob'] = 1/edge_prob_num
+        permutation_dict[(self.source,)]['edge_prob_num'] = edge_prob_num
         new_list = []
 
         while len(new_list) < self.node_num:
             new_permutation_dict = NFeatureDict()
-            for k in list(permutation_dict.keys()):
-                temp = ast.literal_eval(k)
+            for temp, data in permutation_dict.items():
                 temp_neighbors = []
                 for node in temp:
-                    temp_neighbors = temp_neighbors + list(self.tree.neighbors(node))
+                    temp_neighbors.extend(self.tree.neighbors(node))
                 temp_neighbors = list(set(temp_neighbors).difference(set(temp)))
-                new_permutation_prob = permutation_dict[k]["permutation_prob"]/len(temp_neighbors)
+                new_permutation_prob = data["permutation_prob"]/max(1, len(temp_neighbors))
                 for i in temp_neighbors:
-                    new_temp = temp + [i]
-                    new_permutation_dict[str(new_temp)]['permutation_prob'] = new_permutation_prob
-                    new_permutation_dict[str(new_temp)]['edge_prob_num'] = edge_prob_num
-            permutation_dict = copy.copy(new_permutation_dict)
+                    new_temp = temp + (i,)
+                    new_permutation_dict[new_temp]['permutation_prob'] = new_permutation_prob
+                    new_permutation_dict[new_temp]['edge_prob_num'] = edge_prob_num
+            permutation_dict = new_permutation_dict
 
-            new_list = list(permutation_dict.keys())[0]
-            new_list = ast.literal_eval(new_list)
+            new_list = list(permutation_dict.keys())[0] if permutation_dict else []
 
-        # print(permutation_dict)
         return permutation_dict
 
     def cal_ds2(self):
@@ -74,31 +71,23 @@ class CalDS(object):
         no_add_select_pool.append(self.source)
         edge_prob_num = 1
         permutation_dict = {}
-        permutation_dict[str([self.source])] = 1/edge_prob_num
+        permutation_dict[(self.source,)] = 1/edge_prob_num
         new_list = []
 
         while len(new_list) < self.node_num:
             new_permutation_dict = {}
-            for k in list(permutation_dict.keys()):
-                # print("k:",k)
-                temp = ast.literal_eval(k)
+            for temp, prob in permutation_dict.items():
                 temp_neighbors = []
                 for node in temp:
-                    temp_neighbors = temp_neighbors + list(self.tree.neighbors(node))
-                # print("**temp_neighbors:", temp_neighbors)
+                    temp_neighbors.extend(self.tree.neighbors(node))
                 temp_neighbors = list(set(temp_neighbors).difference(set(temp)))
-                # print("temp_neighbors:", temp_neighbors)
-                new_permutation_prob = permutation_dict[k]/max(1,len(temp_neighbors))
+                new_permutation_prob = prob/max(1, len(temp_neighbors))
                 for i in temp_neighbors:
-                    new_temp = temp + [i]
-                    new_permutation_dict[str(new_temp)]= new_permutation_prob
-            permutation_dict = copy.copy(new_permutation_dict)
-            # print("permutation_dict:", permutation_dict)
+                    new_temp = temp + (i,)
+                    new_permutation_dict[new_temp]= new_permutation_prob
+            permutation_dict = new_permutation_dict
+            new_list = list(permutation_dict.keys())[0] if permutation_dict else []
 
-            new_list = list(permutation_dict.keys())[0]
-            new_list = ast.literal_eval(new_list)
-
-        # print(permutation_dict)
         return permutation_dict
 
 

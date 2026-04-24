@@ -116,48 +116,14 @@ def assign_edge_weights(dgl_graph, nx_graph: nx.Graph = None,
 # WeightedSAGE  —  DeepTrace++
 # ---------------------------------------------------------------------------
 
-class WeightedMessagePassing(nn.Module):
-    """
-    A single weighted graph-conv layer.
-
-    Aggregation:
-        AGG(v) = Σ_{u ∈ N(v)}  w_uv · h_u
-
-    where w_uv is read from *graph.edata['w']* (set by assign_edge_weights).
-    The aggregated neighbourhood vector is then concatenated with the self
-    embedding and passed through a linear layer — identical structure to
-    SAGEConv 'mean' but with learned (or pre-computed) edge weights.
-
-        h_v^{(l+1)} = W · [h_v^{(l)} ‖ AGG(v)] + b
-    """
-    def __init__(self, in_feats: int, out_feats: int):
-        super().__init__()
-        self.linear = nn.Linear(in_feats * 2, out_feats)
-
-    def forward(self, graph, h):
-        with graph.local_scope():
-            graph.ndata['h'] = h
-            # m_{u→v} = w_uv * h_u
-            graph.apply_edges(
-                lambda edges: {'m': edges.data['w'] * edges.src['h']}
-            )
-            # AGG(v) = Σ m_{u→v}
-            graph.update_all(
-                dgl.function.copy_e('m', 'm'),
-                dgl.function.sum('m', 'agg')
-            )
-            agg = graph.ndata['agg']             # [N, in_feats]
-            out = self.linear(th.cat([h, agg], dim=1))
-            return out
-
-
 class WeightedSAGE(nn.Module):
     """
     Four-layer GraphSAGE with *weighted* message passing (DeepTrace++).
 
-    Drop-in replacement for SAGE: same constructor signature, same
-    forward(graph, inputs) interface. Requires that the graph's edata
-    contains 'w' (set via assign_edge_weights before calling forward).
+    Architecturally identical to the original SAGE (LSTM aggregator) but
+    injects edge weights via SAGEConv's native edge_weight parameter.
+    This preserves the full representational power of the LSTM aggregator
+    while adding the benefit of degree-weighted message passing.
 
     Parameters
     ----------
@@ -165,19 +131,19 @@ class WeightedSAGE(nn.Module):
     """
     def __init__(self, in_feats: int, hid_feats: int, out_feats: int):
         super().__init__()
-        self.wmp1 = WeightedMessagePassing(in_feats,   hid_feats)
-        self.wmp2 = WeightedMessagePassing(hid_feats,  hid_feats)
-        self.wmp3 = WeightedMessagePassing(hid_feats,  hid_feats)
-        self.wmp4 = WeightedMessagePassing(hid_feats,  out_feats)
+        self.conv1 = dglnn.SAGEConv(in_feats,  hid_feats, aggregator_type='lstm')
+        self.conv2 = dglnn.SAGEConv(hid_feats, hid_feats, aggregator_type='lstm')
+        self.conv3 = dglnn.SAGEConv(hid_feats, hid_feats, aggregator_type='lstm')
+        self.conv4 = dglnn.SAGEConv(hid_feats, out_feats, aggregator_type='lstm')
 
     def forward(self, graph, inputs):
         if 'w' not in graph.edata:
-            # Safety fallback: assign uniform weights if caller forgot
             assign_edge_weights(graph, mode='uniform')
-        h = F.relu(self.wmp1(graph, inputs))
-        h = F.relu(self.wmp2(graph, h))
-        h = F.relu(self.wmp3(graph, h))
-        h = self.wmp4(graph, h)
+        ew = graph.edata['w']
+        h = F.relu(self.conv1(graph, inputs, edge_weight=ew))
+        h = F.relu(self.conv2(graph, h, edge_weight=ew))
+        h = F.relu(self.conv3(graph, h, edge_weight=ew))
+        h = self.conv4(graph, h, edge_weight=ew)
         return h
 
 
