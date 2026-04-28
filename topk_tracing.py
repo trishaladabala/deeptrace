@@ -1,35 +1,4 @@
-"""
-topk_tracing.py  —  DeepTrace++ Adaptive Top-K Forward Tracing
-================================================================
-Implements the adaptive top-k forward tracing strategy described in
-DeepTrace++. Instead of expanding the observed graph G_n via static
-BFS/DFS order, we run the trained GNN at every step, score each
-frontier node with its predicted likelihood score  y_hat_v ≈ log P(G_n | v),
-and expand only the top-k highest-scoring frontier nodes.
 
-Key components
---------------
-* top_k_tracing()       — the new DeepTrace++ forward tracing loop
-* adaptive_tracing()    — confidence-guided adaptive expansion (DeepTrace++²)
-* bfs_tracing_v2()      — thin wrapper around the original BFS logic,
-                           re-implemented here to share the same metric
-                           logging interface as the top-k strategy
-* dfs_tracing_v2()      — same for DFS
-* compare_strategies()  — runs all four on the same graph and returns
-                           a comparison DataFrame
-* TracingMetrics        — lightweight dataclass that records per-step metrics
-
-Usage
------
-    from topk_tracing import compare_strategies
-    from model import SAGE, train_data_process
-    import dgl, torch as th
-
-    # Load a pre-trained model (or pass None to use the MLE heuristic)
-    model = ...
-    results_df = compare_strategies(G, true_source, model, k=3)
-    print(results_df)
-"""
 
 import collections
 import math

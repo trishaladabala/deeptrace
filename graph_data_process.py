@@ -7,12 +7,9 @@ from networkx.algorithms.approximation.steinertree import metric_closure
 from math import log
 import copy
 
-# ---------------------------------------------------------------------------
-# Feature dimension constants — update these if you change feature sets
-# ---------------------------------------------------------------------------
-ORIGINAL_FEAT_DIM = 8   # original DeepTrace features
-ENRICHED_FEAT_DIM = 10  # +2: closeness_centrality, norm_distance_to_index
-TEMPORAL_FEAT_DIM = 11  # +3: discovery_order, time_step, growth_stage
+ORIGINAL_FEAT_DIM = 8
+ENRICHED_FEAT_DIM = 10
+TEMPORAL_FEAT_DIM = 11
 
 class NFeatureDict(dict):
     def __missing__(self, key):
@@ -113,13 +110,13 @@ class TreeDataProcess(object):
             nfeature_dict[k]["layer_rate"] = float(v)
             nfeature_dict[k]["layer_num"] = log(self.layer_num)
 
-        # ── DeepTrace++ enrichment ────────────────────────────────────────
+
         if enriched:
             nfeature_dict = self._enrich_features(nfeature_dict)
 
         return nfeature_dict
 
-    # ------------------------------------------------------------------
+
     def _enrich_features(self, nfeature_dict: 'NFeatureDict') -> 'NFeatureDict':
         """
         Append two centrality-aware features to every node entry.
@@ -139,17 +136,17 @@ class TreeDataProcess(object):
             Nodes close to the index case receive low scores, which
             distinguishes peripheral spreaders from the core cluster.
         """
-        # ── Closeness centrality ──────────────────────────────────────
+
         closeness = nx.closeness_centrality(self.tree)
         max_closeness = max(closeness.values()) if closeness else 1.0
         if max_closeness == 0:
             max_closeness = 1.0
 
-        # ── Index node: highest-degree node as proxy for first case ──
+
         index_node   = max(self.degree_dict, key=lambda n: self.degree_dict[n])
         path_lengths = nx.single_source_shortest_path_length(self.tree, index_node)
 
-        # Diameter — use eccentricity for speed; fallback to max path len
+
         try:
             diam = nx.diameter(self.tree)
         except nx.NetworkXError:

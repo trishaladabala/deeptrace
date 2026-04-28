@@ -1,20 +1,4 @@
-"""
-temporal.py — Temporal (Stage-Wise) Awareness for DeepTrace++
-==============================================================
-Provides temporal feature augmentation, embedding memory with
-exponential smoothing, and a GRU-based recurrent update for
-incorporating historical information across tracing steps.
 
-Key API
--------
-* TemporalFeatureAugmentor — computes 3 temporal features per node
-* EmbeddingMemory          — exponential smoothing across time steps
-* GRUTemporalUpdate        — learnable GRU cell for recurrent embeddings
-* TemporalTracingState     — orchestrator tying the above together
-
-The module is decoupled from the GNN architecture and tracing loop
-so that it can be used as a drop-in augmentation layer.
-"""
 
 from __future__ import annotations
 
@@ -28,33 +12,11 @@ import torch
 import torch.nn as nn
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 1.  Temporal Feature Augmentor
-# ═══════════════════════════════════════════════════════════════════════════
 
 class TemporalFeatureAugmentor:
-    """
-    Computes three temporal features for each node in the observed
-    subgraph G_n:
-
-        discovery_order  — normalised rank in which the node was added
-                           (0.0 = seed node, 1.0 = last discovered)
-        time_step        — normalised tracing step t/T_est when the
-                           node entered G_n
-        growth_stage     — |G_n| / |G_total| at the moment the node
-                           was discovered (how "full" the subgraph was)
-
-    All three features are in [0, 1], making them safe to concatenate
-    with the existing 8-feature vector without rescaling.
-    """
-
+    
     def __init__(self, total_nodes: int):
-        """
-        Parameters
-        ----------
-        total_nodes : total number of nodes in the full graph G
-                      (used to normalise growth_stage and time_step)
-        """
+        
         self.total_nodes = max(total_nodes, 1)
 
         # discovery_order is the insertion rank; we store it per node
@@ -65,7 +27,7 @@ class TemporalFeatureAugmentor:
         self._current_step: int = 0
         self._max_step_estimate: int = total_nodes  # rough upper bound
 
-    # ── Registration ──────────────────────────────────────────────────
+
 
     def register_nodes(self, new_nodes: List[int], step: int,
                        current_graph_size: int) -> None:
@@ -85,7 +47,7 @@ class TemporalFeatureAugmentor:
         """Register the seed node at step 0 with graph size 1."""
         self.register_nodes([seed_node], step=0, current_graph_size=1)
 
-    # ── Feature computation ───────────────────────────────────────────
+
 
     def get_temporal_features(self, node_ids: List[int]) -> np.ndarray:
         """
@@ -142,30 +104,12 @@ class TemporalFeatureAugmentor:
         self._current_step = 0
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 2.  Embedding Memory (Exponential Smoothing)
-# ═══════════════════════════════════════════════════════════════════════════
 
 class EmbeddingMemory:
-    """
-    Stores per-node embeddings across tracing steps and provides
-    exponential moving average (EMA) smoothing.
-
-        smoothed_h(t) = α · h(t)_current + (1 − α) · smoothed_h(t−1)
-
-    This dampens prediction oscillations without adding any learnable
-    parameters.
-    """
+    
 
     def __init__(self, embed_dim: int, alpha: float = 0.3):
-        """
-        Parameters
-        ----------
-        embed_dim : dimensionality of node embeddings
-        alpha     : smoothing factor ∈ (0, 1].
-                    Higher → more weight on current embedding.
-                    Lower  → more weight on history (more stable).
-        """
+        
         self.embed_dim = embed_dim
         self.alpha = alpha
         self._memory: Dict[int, np.ndarray] = {}   # node_id → smoothed embedding
@@ -234,9 +178,6 @@ class EmbeddingMemory:
         self._step_count.clear()
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 3.  GRU Temporal Update (Learnable)
-# ═══════════════════════════════════════════════════════════════════════════
 
 class GRUTemporalUpdate(nn.Module):
     """
@@ -275,35 +216,17 @@ class GRUTemporalUpdate(nn.Module):
         return self.gru_cell(current, previous)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 4.  Temporal Tracing State (Orchestrator)
-# ═══════════════════════════════════════════════════════════════════════════
 
 @dataclass
 class TemporalTracingState:
-    """
-    Orchestrator that ties together temporal features, embedding memory,
-    and optionally a GRU update into a single coherent interface for
-    use inside a tracing loop.
-
-    Usage inside a tracing step:
-
-        # 1. Register newly discovered nodes
-        state.register_new_nodes(new_node_ids, step, len(observed))
-
-        # 2. Get augmented features (base + 3 temporal)
-        augmented = state.augment(base_feats, node_ids)
-
-        # 3. After GNN forward pass, smooth embeddings
-        smoothed = state.smooth_embeddings(node_ids, raw_embeddings)
-    """
+    
 
     total_nodes: int
     embed_dim:   int       = 50     # must match model hid_feats
     alpha:       float     = 0.3    # EMA smoothing factor
     use_gru:     bool      = False
 
-    # ── Internal state (created in __post_init__) ─────────────────────
+
     _augmentor:  Optional[TemporalFeatureAugmentor] = field(
         default=None, init=False, repr=False)
     _memory:     Optional[EmbeddingMemory] = field(
@@ -311,7 +234,7 @@ class TemporalTracingState:
     _gru:        Optional[GRUTemporalUpdate] = field(
         default=None, init=False, repr=False)
 
-    # Per-step logging
+
     prediction_changes: List[bool]  = field(default_factory=list, repr=False)
     embedding_drifts:   List[float] = field(default_factory=list, repr=False)
     _last_prediction:   Optional[int] = field(default=None, init=False, repr=False)
@@ -322,7 +245,7 @@ class TemporalTracingState:
         if self.use_gru:
             self._gru = GRUTemporalUpdate(self.embed_dim)
 
-    # ── Public interface ──────────────────────────────────────────────
+
 
     def register_seed(self, seed_node: int) -> None:
         """Register the seed node at step 0."""
@@ -378,7 +301,7 @@ class TemporalTracingState:
 
         updated = self._gru(current_embeddings, prev)
 
-        # Store the updated embeddings back
+
         updated_np = updated.detach().cpu().numpy()
         for i, nid in enumerate(node_ids):
             self._memory.store(nid, updated_np[i])
@@ -429,16 +352,13 @@ class TemporalTracingState:
         self._last_prediction = None
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Self-test
-# ═══════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     print("=" * 60)
     print("  temporal.py — self-test")
     print("=" * 60)
 
-    # ── 1. TemporalFeatureAugmentor ───────────────────────────────────
+
     print("\n1. TemporalFeatureAugmentor")
     aug = TemporalFeatureAugmentor(total_nodes=100)
     aug.register_seed(seed_node=42)
@@ -455,13 +375,13 @@ if __name__ == "__main__":
     assert feats[0, 0] == 0.0, "Seed should have discovery_order=0"
     print("   ✓ TemporalFeatureAugmentor OK")
 
-    # Test augmentation
+
     base = np.random.randn(6, 8).astype(np.float32)
     augmented = aug.augment_features(base, [42, 10, 20, 30, 50, 60])
     assert augmented.shape == (6, 11), f"Expected (6, 11), got {augmented.shape}"
     print(f"   Augmented shape: {augmented.shape} ✓")
 
-    # ── 2. EmbeddingMemory ────────────────────────────────────────────
+
     print("\n2. EmbeddingMemory")
     mem = EmbeddingMemory(embed_dim=4, alpha=0.5)
 
@@ -482,7 +402,7 @@ if __name__ == "__main__":
     assert drift > 0, "Drift should be positive"
     print("   ✓ EmbeddingMemory OK")
 
-    # ── 3. GRUTemporalUpdate ──────────────────────────────────────────
+
     print("\n3. GRUTemporalUpdate")
     gru = GRUTemporalUpdate(hidden_dim=16)
     cur  = torch.randn(5, 16)
@@ -491,7 +411,7 @@ if __name__ == "__main__":
     assert out.shape == (5, 16), f"Expected (5, 16), got {out.shape}"
     print(f"   GRU output shape: {out.shape} ✓")
 
-    # Verify gradients flow
+
     loss = out.sum()
     loss.backward()
     has_grad = any(p.grad is not None for p in gru.parameters())
@@ -499,45 +419,44 @@ if __name__ == "__main__":
     print("   Gradients flow ✓")
     print("   ✓ GRUTemporalUpdate OK")
 
-    # ── 4. TemporalTracingState ───────────────────────────────────────
+
     print("\n4. TemporalTracingState")
     state = TemporalTracingState(total_nodes=50, embed_dim=4, alpha=0.4)
     state.register_seed(seed_node=0)
     state.register_new_nodes([1, 2, 3], step=1, current_graph_size=4)
     state.register_new_nodes([4, 5], step=2, current_graph_size=6)
 
-    # Augment
+
     base_feats = np.random.randn(6, 8).astype(np.float32)
     node_ids = [0, 1, 2, 3, 4, 5]
     aug_feats = state.augment(base_feats, node_ids)
     assert aug_feats.shape == (6, 11)
     print(f"   Augmented features: {aug_feats.shape} ✓")
 
-    # Smooth
+
     raw_emb = np.random.randn(6, 4).astype(np.float32)
     smoothed = state.smooth_embeddings(node_ids, raw_emb)
     assert smoothed.shape == raw_emb.shape
     print(f"   Smoothed embeddings: {smoothed.shape} ✓")
 
-    # Second smoothing → drift should be finite
+
     raw_emb2 = np.random.randn(6, 4).astype(np.float32)
     smoothed2 = state.smooth_embeddings(node_ids, raw_emb2)
     assert state.embedding_drifts[-1] != float('inf')
     print(f"   Embedding drift (step 2): {state.embedding_drifts[-1]:.4f} ✓")
 
-    # Prediction tracking
+
     state.log_prediction(0)
     state.log_prediction(0)
     state.log_prediction(1)
     state.log_prediction(1)
-    # log sequence: None→0 (no change), 0→0 (no change), 0→1 (change), 1→1 (no change)
-    # changes = [False, False, True, False] → stability = 1 - 1/4 = 0.75
+
     print(f"   Prediction stability: {state.prediction_stability:.2f} "
           f"(expect 0.75)")
     assert abs(state.prediction_stability - 0.75) < 1e-6, \
         f"Expected 0.75, got {state.prediction_stability}"
 
-    # Summary
+
     summary = state.summary()
     print(f"   Summary: {summary}")
     print("   ✓ TemporalTracingState OK")

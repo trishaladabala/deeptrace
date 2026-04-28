@@ -23,11 +23,11 @@ def real_data_process(file_path: str, enriched: bool = False):
     tree = nx.Graph()
     tree.add_edges_from(edges)
     
-    # Use largest connected component
+
     largest_cc = max(nx.connected_components(tree), key=len)
     tree = tree.subgraph(largest_cc).copy()
     
-    # Map real node IDs to 0...N-1 to work smoothly with DGL
+
     tree = nx.convert_node_labels_to_integers(tree)
     
     proc = TreeDataProcess(tree)
@@ -35,9 +35,7 @@ def real_data_process(file_path: str, enriched: bool = False):
     nfeat = proc.nfeature_process(enriched=enriched)
     tree.remove_nodes_from(list(unift))
     
-    # In real world datasets without strict metadata, the index case (patient zero) 
-    # is often proxied by the node with the highest local degree (super-spreader) 
-    # or the analytical Rumor Center. We will evaluate against the Rumor Center.
+
     labels = []
     nodes_list = list(nx.nodes(tree))
     for node in nodes_list:
@@ -49,10 +47,9 @@ def real_data_process(file_path: str, enriched: bool = False):
         except (ZeroDivisionError, ValueError):
             labels.append(0.0)
             
-    # The mathematical true source according to the analytical likelihood
     rumor_center_idx = int(np.argmax(labels))
     
-    # Extract features
+
     feat_rows = []
     for node in nodes_list:
         v = nfeat[node]
@@ -77,7 +74,7 @@ def run_real_world_evaluation():
     print("======================================================================")
 
     print("\n[1/3] Building synthetic training data (ER networks)...")
-    # We train the GNN on purely synthetic data, and ask it to generalize to real data!
+
     train_trees_base = build_training_data(num_trees=30, node_range=(80, 150), enriched=False)
     train_trees_enriched = build_training_data(num_trees=30, node_range=(80, 150), enriched=True)
     
@@ -134,9 +131,7 @@ def run_real_world_evaluation():
             
         print(f"\n── Dataset: {os.path.basename(f_path)} ──")
         
-        # Base Data
         dgl_base, tree_nx, true_source, _ = real_data_process(f_path, enriched=False)
-        # Enriched Data
         dgl_enriched, _, _, _ = real_data_process(f_path, enriched=True)
         
         for name, model in models.items():
@@ -183,7 +178,7 @@ def run_real_world_evaluation():
                 "time_s": end_t - start_t
             })
             
-    # Print summary
+
     df = pd.DataFrame(results)
     
     print("\n======================================================================")

@@ -1,26 +1,4 @@
-"""
-evaluation.py — DeepTrace vs DeepTrace++ Performance Evaluation
-================================================================
-Reproduces the metrics from Section V of the DeepTrace paper and
-extends them with DeepTrace++ comparisons.
 
-Metrics (from the paper):
-  1. Top-k accuracy (k=1, 5, 10) — is the true source in the top-k predictions?
-  2. Bias — MSE between predicted and true log-likelihood scores
-  3. First detection time — how many nodes traced before source is first found
-  4. Average hop error — mean shortest-path distance (predicted vs true source)
-  5. Wall time — computational efficiency
-
-Tested across network topologies:
-  - Erdos-Renyi (ER)
-  - Barabasi-Albert (BA)
-  - Watts-Strogatz (WS)
-  - Regular random graphs
-  - Stochastic Block Model (SBM / community)
-
-Usage:
-    python evaluation.py
-"""
 
 import os, time, random, warnings
 from math import sqrt, floor
@@ -45,9 +23,6 @@ from model import (SAGE, WeightedSAGE, TemporalSAGE,
 
 warnings.filterwarnings("ignore")
 
-# ═══════════════════════════════════════════════════════════════════
-# 1. NETWORK GENERATORS  (Table II in the paper)
-# ═══════════════════════════════════════════════════════════════════
 
 def generate_network(topology: str, n: int = 100, seed: int = None) -> nx.Graph:
     """Generate an underlying network G, then simulate SI spreading to get
@@ -73,11 +48,11 @@ def generate_network(topology: str, n: int = 100, seed: int = None) -> nx.Graph:
     else:
         raise ValueError(f"Unknown topology: {topology}")
 
-    # Ensure connected
+
     if not nx.is_connected(G):
         G = G.subgraph(max(nx.connected_components(G), key=len)).copy()
 
-    # SI spreading simulation
+
     source = rng.choice(list(G.nodes()))
     infected = {source}
     frontier = list(G.neighbors(source))
@@ -88,7 +63,7 @@ def generate_network(topology: str, n: int = 100, seed: int = None) -> nx.Graph:
         new_node = frontier.pop(0)
         if new_node in infected:
             continue
-        # Find parent (the infected neighbor that "transmitted")
+
         parents = [nb for nb in G.neighbors(new_node) if nb in infected]
         if not parents:
             continue
@@ -104,9 +79,6 @@ def generate_network(topology: str, n: int = 100, seed: int = None) -> nx.Graph:
     return tree, source_new
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 2. TRAINING HELPERS
-# ═══════════════════════════════════════════════════════════════════
 
 def build_training_data(num_trees=30, node_range=(80, 200), enriched=False):
     """Build a batched DGL training set from synthetic WS trees."""
@@ -144,9 +116,6 @@ def train_model(model_class, feat_dim, train_batch, epochs=50,
     return model
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 3. EVALUATION METRICS (Section V of the paper)
-# ═══════════════════════════════════════════════════════════════════
 
 def compute_scores_on_tree(model, tree: nx.Graph, enriched=False,
                            weighted_mode=None):
@@ -243,7 +212,6 @@ def forward_trace_first_detection(tree, true_source, model, enriched=False,
     hop_errors = []
     t0 = time.time()
 
-    # Sample every few steps for speed on larger graphs
     sample_interval = max(1, len(order) // 20)
 
     for step_i, node in enumerate(order[1:], 1):
@@ -273,7 +241,7 @@ def forward_trace_first_detection(tree, true_source, model, enriched=False,
         if pred_src == true_source and first_detection is None:
             first_detection = len(observed)
 
-        # Early stop for speed (sample every few steps for large graphs)
+
         if step_i > 30 and step_i % 5 != 0:
             continue
 
@@ -285,9 +253,6 @@ def forward_trace_first_detection(tree, true_source, model, enriched=False,
     return first_detection, avg_hop, wall
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 4. RUMOR CENTER BASELINE (from rumor_centrality.py)
-# ═══════════════════════════════════════════════════════════════════
 
 def rumor_center_predict(tree: nx.Graph):
     """Simple rumor center heuristic: node that minimises max distance to leaves."""
@@ -300,28 +265,10 @@ def rumor_center_predict(tree: nx.Graph):
         return list(tree.nodes())[0]
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 5. MAIN EVALUATION RUNNER
-# ═══════════════════════════════════════════════════════════════════
 
 def run_evaluation(topologies=None, n_nodes=200, n_trials=20,
                    train_epochs=150, n_train_trees=30):
-    """
-    Full evaluation comparing DeepTrace (original) vs DeepTrace++ variants.
-
-    Models compared:
-      - DeepTrace (SAGE, 8 features)
-      - DeepTrace++ enriched (SAGE, 10 features)
-      - DeepTrace++ weighted (WeightedSAGE, 8 features, degree weights)
-      - Rumor Center baseline
-
-    Metrics per topology × model:
-      - Top-1, Top-5, Top-10 accuracy
-      - Bias (MSE)
-      - Average hop error
-      - First detection time (BFS tracing)
-      - Wall time
-    """
+    
     if topologies is None:
         topologies = ["ER", "BA", "WS", "Regular", "SBM"]
 
@@ -329,7 +276,7 @@ def run_evaluation(topologies=None, n_nodes=200, n_trials=20,
     print("  DeepTrace vs DeepTrace++ — Section V Evaluation")
     print("=" * 70)
 
-    # ── Train all model variants ──────────────────────────────────────
+
     print("\n[1/3] Building training data...")
     train_orig = build_training_data(n_train_trees, enriched=False)
     train_enr  = build_training_data(n_train_trees, enriched=True)
@@ -341,7 +288,7 @@ def run_evaluation(topologies=None, n_nodes=200, n_trials=20,
                              epochs=train_epochs)
     model_wt   = train_model(WeightedSAGE, ORIGINAL_FEAT_DIM, train_orig,
                              epochs=train_epochs, weighted_mode='degree')
-    # Full DeepTrace++: WeightedSAGE + enriched features + degree weights
+
     model_full = train_model(WeightedSAGE, ENRICHED_FEAT_DIM, train_enr,
                              epochs=train_epochs, weighted_mode='degree')
 
@@ -350,7 +297,6 @@ def run_evaluation(topologies=None, n_nodes=200, n_trials=20,
         "DT++ enriched":      (model_enr,  True,  None),
         "DT++ weighted":      (model_wt,   False, 'degree'),
         "DeepTrace++":        (model_full, True,  'degree'),
-        "Rumor Center":       (None,       False, None),
     }
 
     print(f"[3/3] Evaluating on {len(topologies)} topologies × "
@@ -395,7 +341,7 @@ def run_evaluation(topologies=None, n_nodes=200, n_trials=20,
                     bias = eval_bias(preds, labels)
                     hop  = eval_hop_error(tree, preds, labels, nodes) if nodes else -1
 
-                    # First detection via BFS tracing (expensive — sample)
+
                     if trial < 5:
                         fdt, avg_h, _ = forward_trace_first_detection(
                             tree, true_src, model, enriched=enriched,
@@ -418,10 +364,10 @@ def run_evaluation(topologies=None, n_nodes=200, n_trials=20,
             if trial % 5 == 0:
                 print(f"  trial {trial+1}/{n_trials} done")
 
-    # ── Build results DataFrame ───────────────────────────────────────
+
     df = pd.DataFrame(all_results)
 
-    # ── Aggregate summary ─────────────────────────────────────────────
+
     summary = (df.groupby(["topology", "model"])
                .agg(
                    top1_acc=("top1", "mean"),
@@ -434,7 +380,7 @@ def run_evaluation(topologies=None, n_nodes=200, n_trials=20,
                )
                .reset_index())
 
-    # ── Print results ─────────────────────────────────────────────────
+
     print("\n" + "=" * 70)
     print("  RESULTS SUMMARY")
     print("=" * 70)
@@ -446,7 +392,7 @@ def run_evaluation(topologies=None, n_nodes=200, n_trials=20,
                     "mean_hop_err", "mean_first_detect",
                     "mean_time_s"]].to_string(index=False))
 
-    # ── Overall comparison ────────────────────────────────────────────
+
     print("\n── Overall (averaged across all topologies) ──")
     overall = (df.groupby("model")
                .agg(
@@ -461,7 +407,7 @@ def run_evaluation(topologies=None, n_nodes=200, n_trials=20,
                .sort_values("top1_acc", ascending=False))
     print(overall.to_string(index=False))
 
-    # ── Save ──────────────────────────────────────────────────────────
+
     os.makedirs("evaluation_results", exist_ok=True)
     df.to_csv("evaluation_results/full_results.csv", index=False)
     summary.to_csv("evaluation_results/summary_by_topology.csv", index=False)
@@ -471,9 +417,6 @@ def run_evaluation(topologies=None, n_nodes=200, n_trials=20,
     return df, summary, overall
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 6. ENTRY POINT
-# ═══════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     run_evaluation(

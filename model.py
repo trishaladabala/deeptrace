@@ -41,38 +41,9 @@ class SAGE(nn.Module):
         return h
 
 
-# ---------------------------------------------------------------------------
-# Edge weight utilities  —  DeepTrace++
-# ---------------------------------------------------------------------------
-
 def assign_edge_weights(dgl_graph, nx_graph: nx.Graph = None,
                         mode: str = 'degree') -> None:
-    """
-    Compute and store a scalar weight w_uv on every edge of *dgl_graph*.
-    Weights are normalised per destination node so that Σ_u w_uv = 1
-    (row-softmax), making them valid probability-like attention scalars.
-
-    Three weight modes
-    ------------------
-    'degree' (default)
-        w_uv ∝ 1 / degree(u)  — nodes with fewer connections carry
-        proportionally stronger signal per edge (mirrors the DeepTrace
-        likelihood intuition that low-degree hubs are more informative).
-
-    'uniform'
-        w_uv = 1 / |N(v)|  — identical to the original unweighted SAGE
-        mean aggregator; useful as a controlled baseline.
-
-    'random'
-        w_uv ~ Uniform(0,1), then row-softmax normalised — used to
-        sanity-check that *any* weighting outperforms a random one.
-
-    Parameters
-    ----------
-    dgl_graph : DGLGraph  (modified in-place)
-    nx_graph  : optional source NetworkX graph for degree look-up
-    mode      : 'degree' | 'uniform' | 'random'
-    """
+    
     num_edges = dgl_graph.num_edges()
     src, dst  = dgl_graph.edges()
 
@@ -112,23 +83,9 @@ def assign_edge_weights(dgl_graph, nx_graph: nx.Graph = None,
     dgl_graph.edata['w'] = weights.unsqueeze(1)  # shape [E, 1]
 
 
-# ---------------------------------------------------------------------------
-# WeightedSAGE  —  DeepTrace++
-# ---------------------------------------------------------------------------
 
 class WeightedSAGE(nn.Module):
-    """
-    Four-layer GraphSAGE with *weighted* message passing (DeepTrace++).
-
-    Architecturally identical to the original SAGE (LSTM aggregator) but
-    injects edge weights via SAGEConv's native edge_weight parameter.
-    This preserves the full representational power of the LSTM aggregator
-    while adding the benefit of degree-weighted message passing.
-
-    Parameters
-    ----------
-    in_feats, hid_feats, out_feats : identical semantics to SAGE
-    """
+  
     def __init__(self, in_feats: int, hid_feats: int, out_feats: int):
         super().__init__()
         self.conv1 = dglnn.SAGEConv(in_feats,  hid_feats, aggregator_type='lstm')
@@ -152,26 +109,7 @@ class WeightedSAGE(nn.Module):
 # ---------------------------------------------------------------------------
 
 class TemporalSAGE(nn.Module):
-    """
-    GraphSAGE variant that accepts temporal-augmented features and
-    optionally applies a GRU recurrent update on hidden embeddings.
-
-    Drop-in compatible with SAGE: same forward(graph, inputs) signature.
-    The only difference is that `in_feats` should be TEMPORAL_FEAT_DIM (11)
-    instead of ORIGINAL_FEAT_DIM (8), and the model exposes a `get_embeddings`
-    method that returns the intermediate hidden representations (before the
-    output layer) for use with the embedding memory / smoothing system.
-
-    Parameters
-    ----------
-    in_feats  : input feature dimension (11 for temporal, 8 for original)
-    hid_feats : hidden layer dimension
-    out_feats : output dimension (1 for superspreader scoring)
-    use_gru   : if True, insert a GRU cell between conv3 and conv4
-                that merges current embeddings with previous-step embeddings.
-                The caller must provide `prev_hidden` to forward().
-    """
-
+    
     def __init__(self, in_feats: int, hid_feats: int, out_feats: int,
                  use_gru: bool = False):
         super().__init__()
@@ -190,18 +128,7 @@ class TemporalSAGE(nn.Module):
                 input_size=hid_feats, hidden_size=hid_feats)
 
     def forward(self, graph, inputs, prev_hidden=None):
-        """
-        Parameters
-        ----------
-        graph       : DGL graph
-        inputs      : (N, in_feats) node features
-        prev_hidden : (N, hid_feats) optional previous hidden state
-                      for GRU update.  Ignored if use_gru=False.
 
-        Returns
-        -------
-        logits : (N, out_feats) — predictions
-        """
         h = self.conv1(graph, inputs)
         h = F.relu(h)
         h = self.conv2(graph, h)
@@ -217,16 +144,7 @@ class TemporalSAGE(nn.Module):
         return h
 
     def get_embeddings(self, graph, inputs, prev_hidden=None):
-        """
-        Run the forward pass but return the *hidden embeddings* (before
-        the final output layer) instead of the logits.  Used by the
-        embedding memory / smoothing system.
 
-        Returns
-        -------
-        embeddings : (N, hid_feats)
-        logits     : (N, out_feats)
-        """
         h = self.conv1(graph, inputs)
         h = F.relu(h)
         h = self.conv2(graph, h)
@@ -556,36 +474,9 @@ def gnn_test_real_networks(train_patch_tree):
     print("Real data evaluation saved to eval_position_real_data.csv")
 
 
-# ---------------------------------------------------------------------------
-# Ablation study: original (8 feat) vs enriched (10 feat)  — DeepTrace++
-# ---------------------------------------------------------------------------
-
 def run_ablation_study(tree_num_train: int = 20, node_num_train: int = 150,
                        test_tree_num: int = 5, test_node_num: int = 100,
                        epoch_num: int = 50, runs: int = 3):
-    """
-    Train and evaluate two SAGE models side-by-side:
-      - 'original'  : 8-feature vector (standard DeepTrace)
-      - 'enriched'  : 10-feature vector (DeepTrace++ with closeness
-                       centrality and normalised distance-to-index)
-
-    Logged metrics per run:
-      - final training loss
-      - final validation R²
-      - mean predicted position (rank of the true superspreader across
-        100 test trees with node_num = 100)
-
-    Results are printed to stdout and saved to ablation_study.csv.
-
-    Parameters
-    ----------
-    tree_num_train  : trees per batch for training
-    node_num_train  : base node count for training trees
-    test_tree_num   : number of test trees for R² evaluation
-    test_node_num   : node count for test trees
-    epoch_num       : training epochs
-    runs            : how many independent runs to average over
-    """
     import time
 
     print("\n" + "=" * 65)
@@ -683,38 +574,7 @@ def compare_weighted_unweighted(
     runs:           int = 3,
     weight_modes:   list = None,
 ) -> pd.DataFrame:
-    """
-    Train and compare four model variants:
 
-    ┌─────────────────┬────────────────────────────────────────────────┐
-    │ Variant         │ Description                                    │
-    ├─────────────────┼────────────────────────────────────────────────┤
-    │ unweighted      │ Original SAGE (lstm aggregator, no edata)      │
-    │ weighted-degree │ WeightedSAGE, w ∝ 1/degree(u), row-softmax     │
-    │ weighted-uniform│ WeightedSAGE, uniform weights (SAGEConv mean   │
-    │                 │ equivalent — shows pure architecture benefit)  │
-    │ weighted-random │ WeightedSAGE, random weights (sanity baseline) │
-    └─────────────────┴────────────────────────────────────────────────┘
-
-    Metrics logged per run
-    ----------------------
-    - final training MSE loss
-    - final validation R²
-    - mean rank of true superspreader across 100 held-out test trees
-    - wall time (seconds)
-
-    Results are printed as a table and saved to edge_weight_comparison.csv.
-
-    Parameters
-    ----------
-    tree_num_train : trees per training batch
-    node_num_train : base node count for training trees
-    test_node_num  : node count for test trees
-    epoch_num      : training epochs per run
-    runs           : independent runs to average over
-    weight_modes   : list of weight-mode strings to benchmark
-                     (default: ['degree', 'uniform', 'random'])
-    """
     if weight_modes is None:
         weight_modes = ['degree', 'uniform', 'random']
 
